@@ -1,0 +1,30 @@
+*.asv
+*.m~
+*.fig
+*.mat        
+*.mex*
+*.mdl
+*.slx
+*.autosave
+
+outputs/*
+!outputs/.gitkeep        # keep the folder but ignore its contents
+docs/figures/*
+!docs/figures/.gitkeep   # same idea for docs/figures
+
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.tmp
+*.log
+*.bak
+*.swp
+*.swo
+*.orig
+~$*
+ehthumbs.db
+
+.vscode/
+.idea/
+.nbproject/
+*.code-workspace
