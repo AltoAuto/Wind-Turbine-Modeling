@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this work, please cite it as below."
+title: "Wind Turbine Performance Modeling (ME 4053)"
+authors:
+  - family-names: Wang
+    given-names: Aiden
+  - family-names: Brandtjen
+    given-names: William
+  - family-names: Idrovo Coronel
+    given-names: Christopher
+date-released: 2025-10-25
+version: "v1.0.0"
+url: "https://github.com/<your-org-or-user>/wind-turbine-me4053"
+  
