@@ -7,13 +7,12 @@ Modeling and analysis of a 2.5 MW, 3-blade, variable-speed, pitch-controlled win
 ## Features
 - Single-entry MATLAB script (`main.m`) with local helpers.
 - BEM kernel with Prandtl tip loss and high-induction correction.
-- Automated deliverables:
+- Deliverables:
   - **D1**: Single-point CP/CT @ (V=10 m/s, rpm=14, β=0°)
   - **D2**: CP vs β at fixed TSR (find β*)
   - **D3**: CP(λ,β) map at fixed V
   - **D4**: Pitch schedule β(V) to cap at 2.5 MW (rpm\_max)
   - **D5**: Tower stress & top deflection under thrust from D4
-- Validation for D2 with PASS/FAIL report.
 
 ---
 
