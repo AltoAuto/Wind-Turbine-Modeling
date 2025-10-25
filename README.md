@@ -25,6 +25,7 @@ wind-turbine-me4053/
 ├─ CITATION.cff
 ├─ .gitignore
 ├─ main.m
+├─ main.prj
 ├─ data/
 │  ├─ blade geometry.csv
 │  ├─ airfoil_DU91.csv
