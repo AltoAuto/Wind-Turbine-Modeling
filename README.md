@@ -35,8 +35,7 @@ wind-turbine-me4053/
 │  └─ tower specs.csv
 ├─ outputs/              # generated; stays empty in Git
 │  └─ (plots, .csv)
-├─ docs/
-│  ├─ figures/           # copies of final figures for the report
-│  └─ report-notes.md    # optional: outline, figure captions
-└─ scripts/              # optional helper scripts (export figs, etc.)
+└─ docs/
+   ├─ figures/           # copies of final figures for the report
+   └─ report-notes.md    # optional: outline, figure captions
 
