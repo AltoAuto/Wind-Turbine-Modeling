@@ -336,7 +336,7 @@ SF_yield = cfg.steel_sigma_y / maxStress;
 
 % Fatigue check 
 % Settings (Shigley + Goodman)
-if ~isfield(cfg,'fatigue_sigmaa_frac'), cfg.fatigue_sigmaa_frac = 0.10; end   % assumed σ_a = 10% σ_m (change if given)
+if ~isfield(cfg,'fatigue_sigmaa_frac'), cfg.fatigue_sigmaa_frac = 0.10; end   % assumed σ_a = 10% σ_m 
 cfg.fatigue = struct( ...
   'CL', 1.0, ...   % load factor: bending
   'CS', 0.80, ...  % surface factor: ~as-welded steel ~0.75–0.85
@@ -357,7 +357,7 @@ Se = Se0 * cfg.fatigue.CL * CG * cfg.fatigue.CS * cfg.fatigue.CT * cfg.fatigue.C
 
 % Mean & alternating stresses at base
 sigma_m = sigma_b;                                            % mean [Pa]
-sigma_a = cfg.fatigue_sigmaa_frac * sigma_m;                  % amplitude [Pa] (replace if instructor gives value)
+sigma_a = cfg.fatigue_sigmaa_frac * sigma_m;                  % amplitude [Pa]
 
 % Goodman safety factor
 SF_fatigue_Goodman = 1 / ( (sigma_a/Se) + (sigma_m/Su) );
@@ -713,3 +713,4 @@ else
     CG = 0.70;   % large cross-section penalty
 end
 end
+
