@@ -666,8 +666,7 @@ if isfinite(P_lo) && isfinite(P_hi) && sign(P_lo)*sign(P_hi) <= 0
     end
 end
 
-% No sign change → clip toward satisfying P ≤ cap (if possible),
-% else pick the nearer boundary by absolute error.
+% clip toward satisfying P <= cap, else pick the nearer boundary by absolute error.
 if P_lo <= 0 && isfinite(P_lo)
     beta_star = beta_lo;
 elseif P_hi <= 0 && isfinite(P_hi)
@@ -713,4 +712,5 @@ else
     CG = 0.70;   % large cross-section penalty
 end
 end
+
 
