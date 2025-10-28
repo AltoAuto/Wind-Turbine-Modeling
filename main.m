@@ -27,8 +27,9 @@ cfg.R        = 48;       % [m] Blade/Rotor Radius
 cfg.H_hub    = 80.4;     % [m] Hub Height
 cfg.P_rated  = 2.5e6;    % [W] Rated Power
 cfg.B        = 3;       % num blades
+cfg.fatigue_sigmaa_frac = 0.10;   % assumed ±10% stress amplitude
 cfg.steel_density   = 7850;       % [kg/m^3] steel density 
-cfg.steel_E         = 210e9;      % [Pa] Young's modulus, typical for steel
+cfg.steel_E         = 210e9;      % [Pa] Young's modulus
 cfg.steel_sigma_u   = 450e6;      % [Pa] ultimate tensile
 cfg.steel_sigma_y   = 345e6;      % [Pa] yield
 cfg.steel_grade     = "ASTM A572 Grade 50";
@@ -139,7 +140,7 @@ fprintf('\n[D2] V=%.1f m/s, lambda=%.2f (rpm=%.2f): beta* = %.2f deg, CP_max = %
 
 V_D3 = 7.5;  % [m/s]
 lambdaVec = (4:0.25:10)';      % TSR sweep
-betaVec   = (-2:0.7:20)';        % deg sweep
+betaVec   = (-2:1:20)';        % deg sweep
 
 CPmap   = nan(numel(betaVec), numel(lambdaVec));
 CTmap   = CPmap;              
@@ -240,12 +241,6 @@ fP = @(beta) bem_performance(cfg, blade, polars, V_D4, rpm_D4, beta).P - Pcap;
 
 % Solve for beta in a practical range
 [beta_star, hit] = d4_find_beta(fP, 0, 30);
-if ~hit
-    [beta_star, hit] = d4_find_beta(fP, 30, 45);
-    if ~hit
-        warning('D4: No exact root found; using clipped beta = %.2f deg', beta_star);
-    end
-end
 
 % Evaluate the final operating point
 outD4 = bem_performance(cfg, blade, polars, V_D4, rpm_D4, beta_star);
@@ -339,7 +334,36 @@ M_base   = M_lin(1);
 sigma_b  = sigma_z(1);
 SF_yield = cfg.steel_sigma_y / maxStress;
 
-% Print summary results
+% Fatigue check 
+% Settings (Shigley + Goodman)
+if ~isfield(cfg,'fatigue_sigmaa_frac'), cfg.fatigue_sigmaa_frac = 0.10; end   % assumed σ_a = 10% σ_m (change if given)
+cfg.fatigue = struct( ...
+  'CL', 1.0, ...   % load factor: bending
+  'CS', 0.80, ...  % surface factor: ~as-welded steel ~0.75–0.85
+  'CT', 1.00, ...  % temperature (room)
+  'CR', 0.90 ...   % reliability (90%)
+);
+
+% Shigley endurance limit Se (corrected) + Goodman SF
+Su   = cfg.steel_sigma_u;                 % ultimate [Pa]
+Se0  = 0.5 * Su;                          % R.R. Moore baseline
+Dbase = OD_lin(1);                        % base diameter [m]
+
+% Size/gradient factor CG from Shigley
+CG = shigley_CG_from_diameter(Dbase);
+
+% Corrected endurance limit
+Se = Se0 * cfg.fatigue.CL * CG * cfg.fatigue.CS * cfg.fatigue.CT * cfg.fatigue.CR;
+
+% Mean & alternating stresses at base
+sigma_m = sigma_b;                                            % mean [Pa]
+sigma_a = cfg.fatigue_sigmaa_frac * sigma_m;                  % amplitude [Pa] (replace if instructor gives value)
+
+% Goodman safety factor
+SF_fatigue_Goodman = 1 / ( (sigma_a/Se) + (sigma_m/Su) );
+
+
+% Print summary results 
 fprintf('\n================== DELIVERABLE 5 ==================\n');
 fprintf('Operating case: V = %.2f m/s, rpm = %.2f, beta = %.2f°\n', V_case, rpm_case, beta_case);
 fprintf('------------------------------------------------------------\n');
@@ -351,42 +375,88 @@ fprintf('Base bending stress               : %8.1f MPa\n', sigma_b/1e6);
 fprintf('Maximum bending stress             : %8.1f MPa  @ z = %.2f m\n', maxStress/1e6, z_lin(idxMax));
 fprintf('Yield strength (steel)             : %8.0f MPa\n', cfg.steel_sigma_y/1e6);
 fprintf('Static safety factor (yield)       : %8.2f\n', SF_yield);
-fprintf('------------------------------------------------------------\n');
 fprintf('Top deflection (lateral)           : %8.3f m\n', delta_top);
+fprintf('------------------------------------------------------------\n');
+fprintf('Goodman Fatigue (Shigley-corrected Se)\n');
+fprintf('  Su: %.1f MPa | Se0=0.5Su: %.1f MPa\n', Su/1e6, (0.5*Su)/1e6);
+fprintf('  Factors: CL=%.2f  CG=%.2f  CS=%.2f  CT=%.2f  CR=%.2f\n', ...
+        cfg.fatigue.CL, CG, cfg.fatigue.CS, cfg.fatigue.CT, cfg.fatigue.CR);
+fprintf('  Se (corrected):                %.1f MPa\n', Se/1e6);
+fprintf('  sigma_m (base):                %.1f MPa\n', sigma_m/1e6);
+fprintf('  sigma_a (%.0f%% of mean):       %.1f MPa\n', 100*cfg.fatigue_sigmaa_frac, sigma_a/1e6);
+fprintf('  SF_fatigue (Goodman):          %.2f\n\n', SF_fatigue_Goodman);
 fprintf('============================================================\n\n');
 
 % Save results to CSV 
+% ---- CSV: static + Shigley + Goodman ----
 D5_summary = table( ...
-    V_case, rpm_case, beta_case, Thrust_N, trapz(z_lin,q_z), ...
-    M_base, sigma_b, maxStress, z_lin(idxMax), SF_yield, delta_top, ...
-    'VariableNames', {'V_mps','rpm','beta_deg','Thrust_N','TowerDrag_N', ...
-                      'BaseMoment_Nm','BaseStress_Pa','MaxStress_Pa','MaxStressLoc_m', ...
-                      'SF_yield','TopDeflection_m'});
+    V_case, rpm_case, beta_case, ...
+    Thrust_N, trapz(z_lin,q_z), ...
+    M_base, sigma_b, maxStress, z_lin(idxMax), ...
+    SF_yield, delta_top, ...
+    Su, Se, ...                             
+    cfg.fatigue.CL, CG, cfg.fatigue.CS, cfg.fatigue.CT, cfg.fatigue.CR, ... 
+    sigma_m, sigma_a, ...
+    SF_fatigue_Goodman, ...
+    'VariableNames', { ...
+        'V_mps','rpm','beta_deg', ...
+        'Thrust_N','TowerDrag_N', ...
+        'BaseMoment_Nm','BaseStress_Pa','MaxStress_Pa','MaxStressLoc_m', ...
+        'SF_yield','TopDeflection_m', ...
+        'Su_Pa','Se_corrected_Pa', ...
+        'CL_load','CG_size','CS_surface','CT_temp','CR_reliability', ...
+        'sigma_m_Pa','sigma_a_Pa', ...
+        'SF_fatigue_Goodman'} );
 writetable(D5_summary, fullfile('outputs','D5_summary.csv'));
+
 
 % Plots
 fig = figure('Color','w');
 
-subplot(3,1,1);
+subplot(4,1,1);
 plot(z_lin, q_z, 'LineWidth',1.8); 
 ylabel('q(z) [N/m]');
 title('Distributed tower drag');
 
-subplot(3,1,2);
+subplot(4,1,2);
 plot(z_lin, M_lin/1e6, 'LineWidth',1.8);
 ylabel('M(z) [MN·m]');
 title('Bending moment (tip load + tower drag)');
 
-subplot(3,1,3);
+subplot(4,1,3);
 plot(z_lin, ydef, 'LineWidth',1.8); 
 xlabel('Height z (m)');
 ylabel('y(z) [m]');
 title('Lateral deflection');
 
+subplot(4,1,4);
+V_lin = (Q1(end) - Q1) + Thrust_N * (z_lin < Hhub);
+plot(z_lin, V_lin/1e3,'LineWidth',1.8); grid on;
+xlabel('z (m)'); ylabel('Shear force V(z) [kN]');
+title('Shear force distribution along tower');
+
 saveas(fig, fullfile('outputs','D5_tower_drag_moment_deflection.png'));
 
 
-
+% Modified Goodman diagram at tower base 
+figure('Color','w'); hold on; grid on;
+% Lines
+plot([0, Su],[Se, 0],'b-','LineWidth',1.8);                 % Goodman
+Sy = cfg.steel_sigma_y;
+plot([0, Sy],[Sy, 0],'r--','LineWidth',1.2);                % Soderberg (ref)
+% Load point & load line
+plot(sigma_m, sigma_a,'gx','MarkerSize',8,'LineWidth',2);
+plot([0, sigma_m],[0, (sigma_a/sigma_m)*sigma_m],'g-','LineWidth',1.2);
+% Labels
+xlabel('\sigma_m  [Pa]'); ylabel('\sigma_a  [Pa]');
+title('Modified Goodman Diagram — Tower Base');
+legend('Goodman (Se–Su)','Soderberg (Sy)','Load point','Load line','Location','northeast');
+% Annotation of SF
+txt = sprintf('Se = %.1f MPa\nSu = %.1f MPa\nSF_{Goodman} = %.2f', ...
+              Se/1e6, Su/1e6, SF_fatigue_Goodman);
+text(0.05*Su, 0.90*Se, txt, ...
+     'Interpreter','tex', 'BackgroundColor','w', 'FontSize',10);
+saveas(gcf, fullfile('outputs','D5_goodman_plot.png'));
 
 
 
@@ -625,5 +695,21 @@ elseif Re <= 5*10^5
 C_D = 10.^(0.32*tanh(44.4504 - 8 * log10 (Re))-0.238793158);
 else
 C_D = 0.1 * log10(Re) - 0.2533429;
+end
+end
+
+
+function CG = shigley_CG_from_diameter(D)
+% Shigley size/gradient factor (bending) – coarse piecewise vs diameter.
+% D in meters. Based on Table 8.1 notes: reduce ~0.1 for 10–50 mm, ~0.2 for >100 mm.
+d_mm = D*1e3;
+if d_mm <= 10
+    CG = 1.00;
+elseif d_mm <= 50
+    CG = 0.90;
+elseif d_mm <= 100
+    CG = 0.80;
+else
+    CG = 0.70;   % large cross-section penalty
 end
 end
