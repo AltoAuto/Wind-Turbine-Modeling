@@ -27,7 +27,7 @@ cfg.R        = 48;       % [m] Blade/Rotor Radius
 cfg.H_hub    = 80.4;     % [m] Hub Height
 cfg.P_rated  = 2.5e6;    % [W] Rated Power
 cfg.B        = 3;       % num blades
-cfg.fatigue_sigmaa_frac = 0.10;   % assumed ±10% stress amplitude
+cfg.fatigue_sigmaa_frac = 0.40;   % ±40% stress amplitude
 cfg.steel_density   = 7850;       % [kg/m^3] steel density 
 cfg.steel_E         = 210e9;      % [Pa] Young's modulus
 cfg.steel_sigma_u   = 450e6;      % [Pa] ultimate tensile
@@ -73,6 +73,10 @@ tower.OD_m = tower.OD_mm*1e-3;
 tower.t_m  = tower.t_mm*1e-3;
 tower.ID_m = tower.OD_m - 2*tower.t_m;
 
+% Ensure tower sections are in ascending height 
+[~,k] = sort(tower.z_m);
+tower = tower(k,:);
+
 %% Deliverable 1
 V_D1 = 10;       % [m/s] wind velocity
 rpm_D1  = 14;   % [rpm] rotational velocity
@@ -84,7 +88,19 @@ out = bem_performance(cfg, blade, polars, V_D1, rpm_D1, beta_D1);
 % Print result
 fprintf('\n[D1] Single point @ V=%.1f m/s, rpm=%.1f, beta=%.1f°\n', V_D1, rpm_D1, beta_D1);
 fprintf('CP=%.4f, CT=%.4f, P=%.1f kW, Thrust=%.0f kN, TSR=%.2f\n', out.CP, out.CT, out.P/1e3, out.Thrust/1e3, out.lambda);
-writetable(struct2table(out), fullfile('outputs','D1_single_point.csv'));
+% CSV outputs 
+% Single-point scalar summary (CSV)
+Tsum = table(out.V, out.rpm, out.beta_deg, out.CP, out.CT, out.P, out.Thrust, out.lambda, ...
+    'VariableNames', {'V_mps','rpm','beta_deg','CP','CT','P_W','Thrust_N','lambda'});
+writetable(Tsum, fullfile('outputs','D1_single_point.csv'));
+
+% Spanwise forces & states (per annulus)
+Tspan = table(out.r, out.dr, out.Fa_blade, out.Ft_blade, out.dT, out.dQ, ...
+              out.phi_rad, out.alpha_deg, out.a, out.ap, ...
+  'VariableNames', {'r_m','dr_m','Fa_per_blade_N','Ft_per_blade_N','dT_N','dQ_Nm', ...
+                    'phi_rad','alpha_deg','a','a_prime'});
+writetable(Tspan, fullfile('outputs','D1_spanwise_forces.csv'));
+
 bar_save_singlepoint(out, fullfile('outputs','D1_single_point_bar.png'));
 
 %% Deliverable 2
@@ -139,7 +155,7 @@ fprintf('\n[D2] V=%.1f m/s, lambda=%.2f (rpm=%.2f): beta* = %.2f deg, CP_max = %
 %   Wind Speed = 7.5 [m/s]
 
 V_D3 = 7.5;  % [m/s]
-lambdaVec = (4:0.25:10)';      % TSR sweep
+lambdaVec = (4:0.5:10)';      % TSR sweep
 betaVec   = (-2:1:20)';        % deg sweep
 
 CPmap   = nan(numel(betaVec), numel(lambdaVec));
@@ -336,7 +352,7 @@ SF_yield = cfg.steel_sigma_y / maxStress;
 
 % Fatigue check 
 % Settings (Shigley + Goodman)
-if ~isfield(cfg,'fatigue_sigmaa_frac'), cfg.fatigue_sigmaa_frac = 0.10; end   % assumed σ_a = 10% σ_m 
+if ~isfield(cfg,'fatigue_sigmaa_frac'), cfg.fatigue_sigmaa_frac = 0.10; end   % assumed σ_a = 10% σ_m (change if given)
 cfg.fatigue = struct( ...
   'CL', 1.0, ...   % load factor: bending
   'CS', 0.80, ...  % surface factor: ~as-welded steel ~0.75–0.85
@@ -357,7 +373,7 @@ Se = Se0 * cfg.fatigue.CL * CG * cfg.fatigue.CS * cfg.fatigue.CT * cfg.fatigue.C
 
 % Mean & alternating stresses at base
 sigma_m = sigma_b;                                            % mean [Pa]
-sigma_a = cfg.fatigue_sigmaa_frac * sigma_m;                  % amplitude [Pa]
+sigma_a = cfg.fatigue_sigmaa_frac * sigma_m;                  % amplitude [Pa] (replace if instructor gives value)
 
 % Goodman safety factor
 SF_fatigue_Goodman = 1 / ( (sigma_a/Se) + (sigma_m/Su) );
@@ -411,31 +427,36 @@ writetable(D5_summary, fullfile('outputs','D5_summary.csv'));
 
 
 % Plots
-fig = figure('Color','w');
+fig = figure('Color','w','Position',[100 100 820 900]);
+tiledlayout(5,1,'Padding','compact','TileSpacing','compact');
 
-subplot(4,1,1);
-plot(z_lin, q_z, 'LineWidth',1.8); 
-ylabel('q(z) [N/m]');
-title('Distributed tower drag');
+% 1) Distributed load
+nexttile;
+plot(z_lin, q_z, 'LineWidth',1.8); grid on;
+ylabel('q(z) [N/m]'); title('Distributed Tower Drag');
 
-subplot(4,1,2);
-plot(z_lin, M_lin/1e6, 'LineWidth',1.8);
-ylabel('M(z) [MN·m]');
-title('Bending moment (tip load + tower drag)');
-
-subplot(4,1,3);
-plot(z_lin, ydef, 'LineWidth',1.8); 
-xlabel('Height z (m)');
-ylabel('y(z) [m]');
-title('Lateral deflection');
-
-subplot(4,1,4);
+% 2) Shear force
 V_lin = (Q1(end) - Q1) + Thrust_N * (z_lin < Hhub);
+nexttile;
 plot(z_lin, V_lin/1e3,'LineWidth',1.8); grid on;
-xlabel('z (m)'); ylabel('Shear force V(z) [kN]');
-title('Shear force distribution along tower');
+ylabel('V(z) [kN]'); title('Shear Force');
 
-saveas(fig, fullfile('outputs','D5_tower_drag_moment_deflection.png'));
+% 3) Bending moment
+nexttile;
+plot(z_lin, M_lin/1e6, 'LineWidth',1.8); grid on;
+ylabel('M(z) [MN·m]'); title('Bending Moment');
+
+% 4) Angle (slope)
+nexttile;
+plot(z_lin, theta, 'LineWidth',1.8); grid on;
+ylabel('\theta(z) [rad]'); title('Rotation / Slope');
+
+% 5) Deflection
+nexttile;
+plot(z_lin, ydef, 'LineWidth',1.8); grid on;
+xlabel('Height z [m]'); ylabel('y(z) [m]'); title('Lateral Deflection');
+
+saveas(fig, fullfile('outputs','D5_beam_plots.png'));
 
 
 % Modified Goodman diagram at tower base 
@@ -457,8 +478,6 @@ txt = sprintf('Se = %.1f MPa\nSu = %.1f MPa\nSF_{Goodman} = %.2f', ...
 text(0.05*Su, 0.90*Se, txt, ...
      'Interpreter','tex', 'BackgroundColor','w', 'FontSize',10);
 saveas(gcf, fullfile('outputs','D5_goodman_plot.png'));
-
-
 
 
 
@@ -514,6 +533,14 @@ chord = blade.chord_m(:);
 twist_deg = blade.twist_deg(:);
 airfoil_id = string(blade.airfoil_id(:));
 [~,ix] = sort(r); r=r(ix); chord=chord(ix); twist_deg=twist_deg(ix); airfoil_id=airfoil_id(ix);
+
+% Spanwise storage (forces & states at any radius)
+phi_arr        = zeros(size(r));   % inflow angle [rad]
+alpha_deg_arr  = zeros(size(r));   % AoA [deg]
+a_arr          = zeros(size(r));   % axial induction
+ap_arr         = zeros(size(r));   % tangential induction
+Fa_blade       = zeros(size(r));   % axial force per blade on annulus [N]
+Ft_blade       = zeros(size(r));   % tangential force per blade [N]
 
 % Discretization spacing, avoid singularities
 dr = [diff(r); max(1e-3, r(end)-r(end-1))];   % last segment length approx
@@ -581,7 +608,12 @@ for i = 1:numel(r)
     dD   = qrel * ci * CD * dr(i);  % drag over annular strip (per blade)
     Fa = dL*cos(phi) + dD*sin(phi);     % axial per blade
     Ft = dL*sin(phi) - dD*cos(phi);     % tangential per blade
-
+    phi_arr(i)       = phi;           % inflow angle at this station
+    alpha_deg_arr(i) = alpha;         % AoA
+    a_arr(i)         = a;
+    ap_arr(i)        = ap;
+    Fa_blade(i)      = Fa;            % axial (≈ z-direction) per blade
+    Ft_blade(i)      = Ft;            % tangential (≈ θ-direction) per blade
     dT(i) = B * Fa;                     % thrust (all blades)
     dQ(i) = B * Ft * ri;                % torque (all blades)
 end
@@ -595,8 +627,15 @@ CP   = P / (0.5*rho*A*V^3);
 CT   = T_ax / (0.5*rho*A*V^2);
 lambda = omega*R / V;
 
-out = struct('V',V,'rpm',rpm,'beta_deg',beta_deg, ...
-    'CP',CP,'CT',CT,'P',P,'Thrust',T_ax,'lambda',lambda);
+out = struct( ...
+    'V',V,'rpm',rpm,'beta_deg',beta_deg, ...
+    'CP',CP,'CT',CT,'P',P,'Thrust',T_ax,'lambda',lambda, ...
+    ... 
+    'r',r,'dr',dr, ...
+    'Fa_blade',Fa_blade,'Ft_blade',Ft_blade, ...  
+    'dT',dT,'dQ',dQ, ...                          
+    'phi_rad',phi_arr,'alpha_deg',alpha_deg_arr, ...
+    'a',a_arr,'ap',ap_arr);
 end
 
 function [CL, CD] = interp_polar(polars, airfoil_id, alpha_deg)
@@ -653,7 +692,14 @@ function bar_save_singlepoint(out, filepath)
 end
 
 function [beta_star, hit] = d4_find_beta(fP, beta_lo, beta_hi)
-% Find beta in [beta_lo, beta_hi] such that fP(beta)=0 (P≈Pcap).
+% D4_FIND_BETA  Find pitch angle beta where P(beta) ≈ Pcap on [beta_lo, beta_hi].
+% INPUTS:
+%   fP        : function handle, returns P(beta) - Pcap [W]
+%   beta_lo   : lower bracket for beta [deg]
+%   beta_hi   : upper bracket for beta [deg]
+% OUTPUTS:
+%   beta_star : solution beta in degrees (clipped to bracket if no sign change)
+%   hit       : true if a sign change was bracketed and fzero succeeded
 P_lo = fP(beta_lo);  P_hi = fP(beta_hi);
 hit = false;
 
@@ -666,7 +712,8 @@ if isfinite(P_lo) && isfinite(P_hi) && sign(P_lo)*sign(P_hi) <= 0
     end
 end
 
-% clip toward satisfying P <= cap, else pick the nearer boundary by absolute error.
+% No sign change → clip toward satisfying P ≤ cap (if possible),
+% else pick the nearer boundary by absolute error.
 if P_lo <= 0 && isfinite(P_lo)
     beta_star = beta_lo;
 elseif P_hi <= 0 && isfinite(P_hi)
@@ -712,5 +759,3 @@ else
     CG = 0.70;   % large cross-section penalty
 end
 end
-
-
