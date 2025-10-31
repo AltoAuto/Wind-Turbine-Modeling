@@ -40,11 +40,11 @@ T{:,1:3} = T{:,1:3} * 1e-3;   % first 3 columns in mm
 T.Properties.VariableNames = {'r_m','dist_face','chord_m','twist_deg','airfoil_id'};
 blade = T;
 
-% Clean and normalize airfoil IDs
+% airfoil IDs
 blade.airfoil_id = string(blade.airfoil_id);
 blade.airfoil_id = upper(strtrim(blade.airfoil_id));
 
-% Remove 'CIRCLE'
+% Remove CIRCLE
 blade = blade(~strcmp(blade.airfoil_id, "CIRCLE"), :);
 
 % Keep only the base airfoil name (remove everything after first hyphen)
@@ -77,7 +77,7 @@ tower.ID_m = tower.OD_m - 2*tower.t_m;
 [~,k] = sort(tower.z_m);
 tower = tower(k,:);
 
-%% Deliverable 1
+%%%%%%%% Deliverable 1 %%%%%%%%
 V_D1 = 10;       % [m/s] wind velocity
 rpm_D1  = 14;   % [rpm] rotational velocity
 beta_D1 = 0;    % [deg] pitch angle
@@ -103,7 +103,7 @@ writetable(Tspan, fullfile('outputs','D1_spanwise_forces.csv'));
 
 bar_save_singlepoint(out, fullfile('outputs','D1_single_point_bar.png'));
 
-%% Deliverable 2
+%%%%%%%% Deliverable 2 %%%%%%%%
 % Given Parameter:
 %   Wind Speed 9.9 [m/s]
 %   Tip Speed Ratio 7.62 [-]
@@ -150,7 +150,7 @@ saveas(fig, fullfile('outputs','D2_CP_vs_pitch_fixedTSR.png'));
 fprintf('\n[D2] V=%.1f m/s, lambda=%.2f (rpm=%.2f): beta* = %.2f deg, CP_max = %.3f\n', ...
         V_D2, lambda_D2, rpm_D2, beta_star, CP_max);
 
-%% Deliverable 3
+%%%%%%%% Deliverable 3 %%%%%%%%
 % Given Parameter 
 %   Wind Speed = 7.5 [m/s]
 
@@ -244,7 +244,7 @@ fprintf('\n[D3] V=%.1f m/s: CP_max=%.3f at lambda*=%.2f, beta*=%.2f deg (rpm=%.2
         V_D3, CP_max, lambda_star, beta_star, rpm_star);
 
 
-%% Deliverable 4 
+%%%%%%%% Deliverable 4 %%%%%%%%
 % Given Parameter 
 %   Wind Speed = 18.8 [m/s]
 
@@ -286,7 +286,7 @@ saveas(fig, fullfile('outputs','D4_power_vs_beta_sanity.png'));
 
 
 
-%% Deliverable 5
+%%%%%%%% Deliverable 5 %%%%%%%%
 % Uses D4 thrust (tip load) + distributed tower drag q(z) via Cd(Re)
 
 % Load D4 case (thrust and operating point)
@@ -759,3 +759,4 @@ else
     CG = 0.70;   % large cross-section penalty
 end
 end
+
